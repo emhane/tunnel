@@ -14,14 +14,14 @@ pub use crypto::{
 /// A Session holds the key chain used to encrypt a [`TunnelPacket`], it uses the same encryption
 /// algorithm as discv5.
 pub struct Session {
-    /// The keys used to encrypt/decrypt messages. Will be passed from one peer to the other in an 
-    /// encrypted discv5 session using the TALKREQ message.
+    /// The key used to encrypt/decrypt messages. Upon starting a session, the key will be passed
+    /// from one peer to the other in an encrypted discv5 session using the TALKREQ message.
     key: EncryptionKey,
-    /// If a new session is being established using discv5 TALKREQ and TALKRESP, the older keys
-    /// are maintained as race conditions in the key sharing can give different views of which
+    /// If a new session is being established using discv5 TALKREQ and TALKRESP, the older key
+    /// is maintained as race conditions in the key sharing can give different views of which
     /// keys are canon. The key that worked to decrypt our last message (or are freshly
-    /// established) exist in `keys` and previous keys are optionally stored in `old_keys`. We
-    /// attempt to decrypt messages with `keys` before optionally trying `old_keys`.
+    /// established) exist in `key` and the previous key is optionally stored in `old_key`. We
+    /// attempt to decrypt messages with `key` before optionally trying `old_key`.
     old_key: Option<EncryptionKey>,
     /// Number of messages sent. Used to ensure the nonce used in message encryption is always
     /// unique.
