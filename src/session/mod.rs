@@ -14,7 +14,8 @@ pub use crypto::{
 /// A Session holds the key chain used to encrypt a [`TunnelPacket`], it uses the same encryption
 /// algorithm as discv5.
 pub struct Session {
-    /// The keys used to encrypt/decrypt messages.
+    /// The keys used to encrypt/decrypt messages. Will be passed from one peer to the other in an 
+    /// encrypted discv5 session using the TALKREQ message.
     key: EncryptionKey,
     /// If a new session is being established using discv5 TALKREQ and TALKRESP, the older keys
     /// are maintained as race conditions in the key sharing can give different views of which
