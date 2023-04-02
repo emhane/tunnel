@@ -65,4 +65,14 @@ impl TunnelPacket {
 
         Ok(packet)
     }
+
+    pub fn encode(self) -> Vec<u8> {
+        let TunnelPacket(header, encrypted_message) = self;
+        let TunnelPacketHeader(conn_id, nonce) = header;
+        let mut buf = Vec::with_capacity(HEADER_LENGTH + encrypted_message.len());
+        buf.extend_from_slice(&conn_id);
+        buf.extend_from_slice(&nonce);
+        buf.extend_from_slice(&encrypted_message);
+        buf
+    }
 }
