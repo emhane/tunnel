@@ -8,8 +8,8 @@ used to share those keys, in TALKREQ and TALKRESP. A tunnel session can be used 
 arbitrary number of packets without making the discv5 session less safe because it doesn't use
 the discv5 session's keys too often.
 
-A tunnel is indexed by a connection id. Since the connection id is a 32 byte hash, there is
-no need to mask the header of a tunnel packet to protect against packet filtering. For this
-a tunnel packet is much lighter than a discv5 frame.
+A tunnel is indexed by the tuple (sr-address, connection-id). Since the connection id is a 32 byte
+hash, there is no need to mask the header of a tunnel packet to protect against packet filtering.
+For this a tunnel packet is much lighter than a discv5 frame.
 
 @emhane [@fjl](https://github.com/fjl)

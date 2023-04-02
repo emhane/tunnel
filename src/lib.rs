@@ -2,10 +2,12 @@ use async_trait::async_trait;
 
 mod error;
 mod macro_rules;
+mod session;
 mod tunnel_packet;
 
-pub use error::{PacketError, TunnelError};
-pub use tunnel_packet::{ConnectionId, InboundTunnelPacket, TunnelPacket};
+pub use error::{PacketError, SessionError, TunnelError};
+pub use session::Session;
+pub use tunnel_packet::{ConnectionId, InboundTunnelPacket, TunnelPacket, TunnelPacketHeader};
 
 #[async_trait]
 pub trait Tunnel {
