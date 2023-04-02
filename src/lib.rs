@@ -5,4 +5,6 @@ mod tunnel_packet;
 
 pub use error::{PacketError, SessionError, TunnelError};
 pub use session::Session;
-pub use tunnel_packet::{ConnectionId, InboundTunnelPacket, TunnelPacket, TunnelPacketHeader};
+pub use tunnel_packet::{
+    ConnectionId, InboundTunnelPacket, OutboundTunnelPacket, TunnelPacket, TunnelPacketHeader,
+};
