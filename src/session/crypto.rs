@@ -38,7 +38,7 @@ impl EncryptionKey {
     ) -> Result<Vec<u8>, AesGcmError> {
         let mut cipher = Aes128Gcm::new(GenericArray::from_slice(&self.0));
         let payload = Payload { msg, aad };
-        cipher.encrypt(GenericArray::from_slice(nonce), msg)
+        cipher.encrypt(GenericArray::from_slice(nonce), payload)
     }
 
     pub fn aes_gcm_128_decrypt(
@@ -49,6 +49,6 @@ impl EncryptionKey {
     ) -> Result<Vec<u8>, AesGcmError> {
         let mut cipher = Aes128Gcm::new(GenericArray::from_slice(&self.0));
         let payload = Payload { msg, aad };
-        cipher.decrypt(GenericArray::from_slice(&msg), payload)
+        cipher.decrypt(GenericArray::from_slice(nonce), payload)
     }
 }
