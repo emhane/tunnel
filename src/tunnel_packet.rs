@@ -24,6 +24,10 @@ pub type ConnectionId = [u8; CONNECTION_ID_LENGTH];
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InboundTunnelPacket(pub SocketAddr, pub TunnelPacket);
 
+/// An dst address and tunnel packet is outbound.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutboundTunnelPacket(pub SocketAddr, pub TunnelPacket);
+
 /// A tunnel packet is a [`TunnelPacketHeader`] and an encrypted message belonging to another
 /// protocol.
 #[derive(Debug, Clone, PartialEq, Eq)]
