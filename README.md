@@ -12,4 +12,6 @@ A tunnel is indexed by the tuple (sr-address, connection-id). Since the connecti
 hash, there is no need to mask the header of a tunnel packet to protect against packet filtering.
 For this a tunnel packet is much lighter than a discv5 frame.
 
+Plugged into discv5: https://github.com/emhane/discv5/tree/tunnel-discv5.2
+
 @emhane [@fjl](https://github.com/fjl)
