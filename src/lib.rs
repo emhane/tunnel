@@ -7,7 +7,7 @@ mod tunnel_packet;
 pub use error::{PacketError, SessionError, TunnelError};
 pub use session::{NonceAesGcm, Session, SESSION_ID_LENGTH};
 pub use tunnel_packet::{
-    ConnectionId, InboundTunnelPacket, OutboundTunnelPacket, TunnelPacket, TunnelPacketHeader,
+    InboundTunnelPacket, OutboundTunnelPacket, TunnelPacket, TunnelPacketHeader,
 };
 
 pub trait SubProtocol {

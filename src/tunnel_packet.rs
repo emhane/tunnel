@@ -1,5 +1,5 @@
 use crate::{
-    session::{NonceAesGcm, NONCE_AES_GCM_LENGTH, SESSION_ID_LENGTH, TAG_AES_GCM_ENGTH},
+    session::{NonceAesGcm, SessionId, NONCE_AES_GCM_LENGTH, SESSION_ID_LENGTH, TAG_AES_GCM_ENGTH},
     PacketError,
 };
 use std::net::SocketAddr;
@@ -10,9 +10,6 @@ pub const MAX_PACKET_SIZE: usize = 1280;
 pub const MIN_PACKET_SIZE: usize = HEADER_LENGTH + TAG_AES_GCM_ENGTH;
 /// Length of the [`TunnelPacketHeader`].
 pub const HEADER_LENGTH: usize = SESSION_ID_LENGTH + NONCE_AES_GCM_LENGTH;
-
-/// A connection id maps to a set of session keys.
-pub type ConnectionId = [u8; SESSION_ID_LENGTH];
 
 /// Src address and inbound tunnel packet.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,15 +27,15 @@ pub struct TunnelPacket(pub TunnelPacketHeader, pub Vec<u8>);
 /// A tunnel packet header has the information to decrypt a tunnel packet. The [`ConnectionId`]
 /// maps to a set of session keys for this tunnel, shared in a discv5 TALKREQ and TALKRESP.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TunnelPacketHeader(pub ConnectionId, pub NonceAesGcm);
+pub struct TunnelPacketHeader(pub SessionId, pub NonceAesGcm);
 
 impl TunnelPacket {
     pub fn decode(data: &[u8]) -> Result<Self, PacketError> {
         if data.len() > MAX_PACKET_SIZE {
-            return Err(PacketError::TooLarge.into());
+            return Err(PacketError::TooLarge);
         }
         if data.len() < MIN_PACKET_SIZE {
-            return Err(PacketError::TooSmall.into());
+            return Err(PacketError::TooSmall);
         }
 
         let mut session_id = [0u8; SESSION_ID_LENGTH];
@@ -47,7 +44,7 @@ impl TunnelPacket {
         session_id.copy_from_slice(&data[..SESSION_ID_LENGTH]);
         nonce.copy_from_slice(&data[SESSION_ID_LENGTH..HEADER_LENGTH]);
 
-        let header = TunnelPacketHeader(session_id, nonce);
+        let header = TunnelPacketHeader(u64::from_be_bytes(session_id), nonce);
 
         // Any remaining bytes are message data
         let data = data[HEADER_LENGTH..].to_vec();
@@ -59,7 +56,7 @@ impl TunnelPacket {
         let TunnelPacket(header, data) = self;
         let TunnelPacketHeader(session_id, nonce) = header;
         let mut buf = Vec::with_capacity(HEADER_LENGTH + data.len());
-        buf.extend_from_slice(&session_id);
+        buf.extend_from_slice(&session_id.to_be_bytes());
         buf.extend_from_slice(&nonce);
         buf.extend_from_slice(&data);
         buf

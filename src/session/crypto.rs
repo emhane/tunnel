@@ -1,6 +1,6 @@
 use aes_gcm::{
-    aead::{generic_array::GenericArray, AeadMut, Payload},
-    Aes128Gcm, Error as AesGcmError, KeyInit,
+    aead::{generic_array::GenericArray, AeadMutInPlace, Payload},
+    Aes128Gcm, Error as AesGcmError,
 };
 use rand;
 
@@ -16,41 +16,48 @@ pub const TAG_AES_GCM_ENGTH: usize = 2;
 /// Nonce used by [`Aes128Gcm`].
 pub type NonceAesGcm = [u8; NONCE_AES_GCM_LENGTH];
 
-/// Key used for en-/decryption.
-pub type Key = [u8; KEY_AES_GCM_128_LENGTH];
-
 pub trait Encrypt {
     fn aes_gcm_128_encrypt(
-        egress_key: &mut Key,
+        egress_cipher: &mut Aes128Gcm,
         nonce_counter: &mut u32,
         msg: &[u8],
+        aad: &[u8], // use session-id
     ) -> Result<Vec<u8>, AesGcmError> {
-        let aad: &[u8; TAG_AES_GCM_ENGTH] = &rand::random();
-        let payload = Payload { msg, aad };
-
-        let nonce: [u8; NONCE_RANDOM_LENGTH] = rand::random();
-        let mut nonce = nonce.to_vec();
-        *nonce_counter += 1u32;
+        *nonce_counter += 1;
+        let random_nonce: [u8; NONCE_RANDOM_LENGTH] = rand::random();
+        let mut nonce = random_nonce.to_vec();
         nonce.append(&mut nonce_counter.to_be_bytes().to_vec());
+        let nonce = GenericArray::from_slice(&nonce);
 
-        let mut cipher = Aes128Gcm::new(GenericArray::from_slice(egress_key));
-        cipher.encrypt(GenericArray::from_slice(&nonce), payload)
+        let mut cipher_text = msg.to_vec();
+
+        let tag = egress_cipher.encrypt_in_place_detached(nonce, aad, &mut cipher_text)?;
+        cipher_text.append(&mut tag.to_vec());
+
+        Ok(cipher_text)
     }
 }
 
 pub trait Decrypt {
     fn aes_gcm_128_decrypt(
-        ingress_key: &Key,
+        ingress_cipher: &mut Aes128Gcm,
         nonce: &NonceAesGcm,
-        cipher_text: &[u8],
+        data: &[u8],
+        aad: &[u8], // use session-id
     ) -> Result<Vec<u8>, AesGcmError> {
-        let offset_tag = cipher_text.len() - TAG_AES_GCM_ENGTH - 1;
-        let aad = &cipher_text[offset_tag..];
-        let msg = &cipher_text[..offset_tag];
-        let payload = Payload { msg, aad };
+        let offset_tag = data.len() - TAG_AES_GCM_ENGTH - 1;
+        let msg = &data[..offset_tag];
+        let tag = &data[offset_tag..];
 
-        let mut cipher = Aes128Gcm::new(GenericArray::from_slice(ingress_key));
+        let mut plain_text = msg.to_vec();
 
-        cipher.decrypt(GenericArray::from_slice(nonce), payload)
+        ingress_cipher.decrypt_in_place_detached(
+            GenericArray::from_slice(nonce),
+            aad,
+            &mut plain_text,
+            GenericArray::from_slice(tag),
+        )?;
+
+        Ok(plain_text)
     }
 }
