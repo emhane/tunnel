@@ -29,12 +29,12 @@ pub trait Encrypt {
         nonce.append(&mut nonce_counter.to_be_bytes().to_vec());
         let nonce = GenericArray::from_slice(&nonce);
 
-        let mut cipher_text = msg.to_vec();
+        let mut buf = msg.to_vec();
 
-        let tag = egress_cipher.encrypt_in_place_detached(nonce, aad, &mut cipher_text)?;
-        cipher_text.append(&mut tag.to_vec());
+        let tag = egress_cipher.encrypt_in_place_detached(nonce, aad, &mut buf)?;
+        buf.append(&mut tag.to_vec());
 
-        Ok(cipher_text)
+        Ok(buf)
     }
 }
 
@@ -49,15 +49,15 @@ pub trait Decrypt {
         let msg = &data[..offset_tag];
         let tag = &data[offset_tag..];
 
-        let mut plain_text = msg.to_vec();
+        let mut buf = msg.to_vec();
 
         ingress_cipher.decrypt_in_place_detached(
             GenericArray::from_slice(nonce),
             aad,
-            &mut plain_text,
+            &mut buf,
             GenericArray::from_slice(tag),
         )?;
 
-        Ok(plain_text)
+        Ok(buf)
     }
 }
