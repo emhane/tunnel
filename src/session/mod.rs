@@ -1,96 +1,136 @@
-use super::*;
-use crate::{
-    tunnel_packet::{CONNECTION_ID_LENGTH, HEADER_LENGTH},
-    SessionError, TunnelPacket, TunnelPacketHeader,
-};
+use hkdf::{Hkdf, InvalidLength as HkdfError};
 use rand;
+use sha2::Sha256;
+use std::net::SocketAddr;
 
 mod crypto;
 
-pub use crypto::{Aad, Cipher, NonceAesGcm128, NONCE_AES_GCM_128_LENGTH, TAG_AES_GCM_128_LENGTH};
+pub use crypto::{
+    Key, NonceAesGcm, KEY_AES_GCM_128_LENGTH, NONCE_AES_GCM_LENGTH, TAG_AES_GCM_ENGTH,
+};
 
-/// A Session holds the key chain used to encrypt a [`TunnelPacket`], it uses the same encryption
-/// algorithm as discv5.
-pub struct Session {
-    /// The key used to encrypt/decrypt messages. Upon starting a session, the key will be passed
-    /// from one peer to the other in an encrypted discv5 session using the TALKREQ message.
-    cipher: Cipher,
-    /// If a new session is being established using discv5 TALKREQ and TALKRESP, the older key
-    /// is maintained as race conditions in the key sharing can give different views of which
-    /// keys are canon. The key that worked to decrypt our last message (or are freshly
-    /// established) exist in `key` and the previous key is optionally stored in `old_key`. We
-    /// attempt to decrypt messages with `key` before optionally trying `old_key`.
-    old_key: Option<Cipher>,
-    /// Number of messages sent. Used to ensure the nonce used in message encryption is always
-    /// unique.
-    counter: u32,
+pub const SESSION_INFO: &'static [u8] = b"discv5 sub-protocol session";
+pub const SECRET_LENGTH: usize = 16;
+pub const KDATA_LENGTH: usize = 48;
+pub const SESSION_ID_LENGTH: usize = 8;
+type Secret = [u8; SECRET_LENGTH];
+type KData = [u8; KDATA_LENGTH];
+type SessionId = u64;
+type Initiator = (SessionId, Key);
+type Recipient = (SessionId, Key);
+
+pub type Session = (EgressSession, IngressSession);
+
+/// A session to encrypt outgoing data.
+pub struct EgressSession {
+    /// Index of egress session.
+    egress_id: u64,
+    /// The key used to encrypt messages.
+    egress_key: Key,
+    /// Nonce counter. Incremented before encrypting each message and included at end of nonce in
+    /// encryption.
+    nonce_counter: u32,
+    /// Ip socket to send packet to.
+    ip: SocketAddr,
 }
 
-impl Session {
-    pub fn new(keys: Cipher) -> Self {
-        Session {
-            cipher: keys,
-            old_key: None,
-            counter: 0,
-        }
+/// A session to decrypt incoming data.
+pub struct IngressSession {
+    /// Index of ingress session.
+    ingress_id: u64,
+    /// The key used to decrypt messages.
+    ingress_key: Key,
+    /// Index of matching egress session to treat sessions as invariant.
+    egress_id: u64,
+}
+
+pub trait EstablishSession {
+    fn initiate(
+        peer_secret: Secret,
+        recipient_socket: SocketAddr,
+        protocol_name: &[u8],
+        host_secret: Secret,
+    ) -> Result<Session, HkdfError> {
+        let ((ingress_id, ingress_key), (egress_id, egress_key)) =
+            compute_kdata(peer_secret, protocol_name, host_secret)?;
+
+        let session = new_session(
+            egress_id,
+            egress_key,
+            recipient_socket,
+            ingress_id,
+            ingress_key,
+        );
+
+        Ok(session)
     }
 
-    /// A new session has been established. Update the session keys.
-    pub fn update(&mut self, new_session: Session) {
-        // Optimistically assume the new keys are canonical.
-        self.old_key = Some(std::mem::replace(&mut self.cipher, new_session.cipher));
+    fn accept(
+        peer_secret: Secret,
+        initiator_socket: SocketAddr,
+        protocol_name: &[u8],
+    ) -> Result<(Session, Secret), HkdfError> {
+        let secret: [u8; SECRET_LENGTH] = rand::random();
+
+        let ((egress_id, egress_key), (ingress_id, ingress_key)) =
+            compute_kdata(peer_secret, protocol_name, secret)?;
+
+        let session = new_session(
+            egress_id,
+            egress_key,
+            initiator_socket,
+            ingress_id,
+            ingress_key,
+        );
+
+        Ok((session, secret))
     }
+}
 
-    /// Uses the current `Session` to encrypt a message. Encrypt packets with the current session
-    /// key if we are awaiting
-    pub fn encrypt_message(
-        &mut self,
-        connection_id: ConnectionId,
-        msg: &[u8],
-    ) -> Result<TunnelPacket, SessionError> {
-        self.counter += 1;
+fn compute_kdata(
+    peer_secret: Secret,
+    protocol_name: &[u8],
+    host_secret: Secret,
+) -> Result<(Initiator, Recipient), HkdfError> {
+    let info = [SESSION_INFO, protocol_name].concat();
+    let hk = Hkdf::<Sha256>::new(None, &[peer_secret, host_secret].concat());
+    let mut kdata = [0u8; KDATA_LENGTH];
+    hk.expand(&info, &mut kdata)?;
 
-        // If the message nonce length is ever set below 4 bytes this will explode. The packet
-        // size constants shouldn't be modified.
-        let random_nonce: [u8; NONCE_AES_GCM_128_LENGTH - 4] = rand::random();
-        let mut nonce: NonceAesGcm128 = [0u8; NONCE_AES_GCM_128_LENGTH];
-        nonce[..4].copy_from_slice(&self.counter.to_be_bytes());
-        nonce[4..].copy_from_slice(&random_nonce);
+    let mut initiator_key = [0u8; KEY_AES_GCM_128_LENGTH];
+    let mut recipient_key = [0u8; KEY_AES_GCM_128_LENGTH];
+    let mut initiator_id = [0u8; SESSION_ID_LENGTH];
+    let mut recipient_id = [0u8; SESSION_ID_LENGTH];
 
-        // As the connection id-nonce mapping is unique for every packet, the header serves the
-        // purpose of additional associated data.
-        let mut aad = [0u8; HEADER_LENGTH];
-        aad[..CONNECTION_ID_LENGTH].copy_from_slice(&connection_id);
-        aad[CONNECTION_ID_LENGTH..].copy_from_slice(&nonce);
-        let cipher_text = self.cipher.aes_gcm_128_encrypt(&nonce, msg, &aad)?;
+    initiator_key.copy_from_slice(&kdata[..KEY_AES_GCM_128_LENGTH]);
+    recipient_key.copy_from_slice(&kdata[KEY_AES_GCM_128_LENGTH..KEY_AES_GCM_128_LENGTH * 2]);
+    initiator_id
+        .copy_from_slice(&kdata[KEY_AES_GCM_128_LENGTH * 2..KDATA_LENGTH - SESSION_ID_LENGTH]);
+    recipient_id.copy_from_slice(&kdata[KDATA_LENGTH - SESSION_ID_LENGTH..]);
 
-        let header = TunnelPacketHeader(connection_id, nonce);
+    let initiator_id = u64::from_be_bytes(initiator_id);
+    let recipient_id = u64::from_be_bytes(recipient_id);
 
-        Ok(TunnelPacket(header, cipher_text))
-    }
+    Ok(((initiator_id, initiator_key), (recipient_id, recipient_key)))
+}
 
-    /// Decrypts an encrypted message. If a Session is already established, the original decryption
-    /// keys are tried first, upon failure, the new keys are attempted. If the new keys succeed,
-    /// the session keys are update.
-    pub fn decrypt_message(
-        &mut self,
-        nonce: NonceAesGcm128,
-        msg: &[u8],
-        aad: &Aad,
-    ) -> Result<Vec<u8>, SessionError> {
-        // First try with the canonical keys.
-        match self.cipher.aes_gcm_128_decrypt(&nonce, msg, aad) {
-            Ok(decrypted) => Ok(decrypted),
-            Err(e) => {
-                // If these keys did not work, try old_keys and
-                if let Some(mut old_cipher) = self.old_key.take() {
-                    let decrypted_old_keys = old_cipher.aes_gcm_128_decrypt(&nonce, msg, aad)?;
-                    // rotate the keys
-                    self.old_key = Some(std::mem::replace(&mut self.cipher, old_cipher));
-                    return Ok(decrypted_old_keys);
-                }
-                return Err(SessionError::EncryptionError(e));
-            }
-        }
-    }
+fn new_session(
+    egress_id: SessionId,
+    egress_key: Key,
+    remote_socket: SocketAddr,
+    ingress_id: SessionId,
+    ingress_key: Key,
+) -> Session {
+    let egress = EgressSession {
+        egress_id,
+        egress_key,
+        nonce_counter: 0,
+        ip: remote_socket,
+    };
+    let ingress = IngressSession {
+        ingress_id,
+        ingress_key,
+        egress_id,
+    };
+    (egress, ingress)
 }
