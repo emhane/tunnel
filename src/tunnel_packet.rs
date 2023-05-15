@@ -1,5 +1,7 @@
 use crate::{
-    session::{NonceAesGcm, SessionId, NONCE_AES_GCM_LENGTH, SESSION_ID_LENGTH, TAG_AES_GCM_ENGTH},
+    session::{
+        GenericArray as NewNonce, Nonce, SessionId, NONCE_LENGTH, SESSION_ID_LENGTH, TAG_LENGTH,
+    },
     PacketError,
 };
 use std::net::SocketAddr;
@@ -7,9 +9,9 @@ use std::net::SocketAddr;
 /// Discv5 max packet size in bytes.
 pub const MAX_PACKET_SIZE: usize = 1280;
 /// Tunnel packet min size in bytes.
-pub const MIN_PACKET_SIZE: usize = HEADER_LENGTH + TAG_AES_GCM_ENGTH;
+pub const MIN_PACKET_SIZE: usize = HEADER_LENGTH + TAG_LENGTH;
 /// Length of the [`TunnelPacketHeader`].
-pub const HEADER_LENGTH: usize = SESSION_ID_LENGTH + NONCE_AES_GCM_LENGTH;
+pub const HEADER_LENGTH: usize = SESSION_ID_LENGTH + NONCE_LENGTH;
 
 /// Src address and inbound tunnel packet.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,7 +29,7 @@ pub struct TunnelPacket(pub TunnelPacketHeader, pub Vec<u8>);
 /// A tunnel packet header has the information to decrypt a tunnel packet. The [`ConnectionId`]
 /// maps to a set of session keys for this tunnel, shared in a discv5 TALKREQ and TALKRESP.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct TunnelPacketHeader(pub SessionId, pub NonceAesGcm);
+pub struct TunnelPacketHeader(pub SessionId, pub Nonce);
 
 impl TunnelPacket {
     pub fn decode(data: &[u8]) -> Result<Self, PacketError> {
@@ -39,12 +41,11 @@ impl TunnelPacket {
         }
 
         let mut session_id = [0u8; SESSION_ID_LENGTH];
-        let mut nonce = [0u8; NONCE_AES_GCM_LENGTH];
 
         session_id.copy_from_slice(&data[..SESSION_ID_LENGTH]);
-        nonce.copy_from_slice(&data[SESSION_ID_LENGTH..HEADER_LENGTH]);
+        let nonce = NewNonce::from_slice(&data[SESSION_ID_LENGTH..HEADER_LENGTH]);
 
-        let header = TunnelPacketHeader(u64::from_be_bytes(session_id), nonce);
+        let header = TunnelPacketHeader(u64::from_be_bytes(session_id), *nonce);
 
         // Any remaining bytes are message data
         let data = data[HEADER_LENGTH..].to_vec();

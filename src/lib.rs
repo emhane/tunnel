@@ -5,7 +5,7 @@ mod session;
 mod tunnel_packet;
 
 pub use error::{PacketError, SessionError, TunnelError};
-pub use session::{NonceAesGcm, Session, SESSION_ID_LENGTH};
+pub use session::*;
 pub use tunnel_packet::{
     InboundTunnelPacket, OutboundTunnelPacket, TunnelPacket, TunnelPacketHeader,
 };
