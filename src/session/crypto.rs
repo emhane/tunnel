@@ -1,6 +1,6 @@
 use super::NonceCounter;
 pub use aes_gcm::{
-    aead::generic_array::GenericArray, aes::cipher::Unsigned, Aes128Gcm as Cipher,
+    aead::generic_array::GenericArray, aes::cipher::Unsigned, Aes128Gcm as AesGcmCipher,
     Error as AesGcmError, KeyInit,
 };
 use aes_gcm::{aead::AeadMutInPlace, AeadCore, KeySizeUser, Nonce as NonceAesGcm};
@@ -10,13 +10,13 @@ use rand;
 use sha2::Sha256;
 
 /// Length of key in bytes.
-pub const KEY_LENGTH: usize = <Cipher as KeySizeUser>::KeySize::USIZE;
+pub const KEY_LENGTH: usize = <AesGcmCipher as KeySizeUser>::KeySize::USIZE;
 /// Length of nonce in bytes.
-pub const NONCE_LENGTH: usize = <Cipher as AeadCore>::NonceSize::USIZE;
+pub const NONCE_LENGTH: usize = <AesGcmCipher as AeadCore>::NonceSize::USIZE;
 /// Length of the random bytes in a [`Nonce`].
 pub const NONCE_RANDOM_LENGTH: usize = NONCE_LENGTH - (NonceCounter::BITS / 8) as usize;
 /// Length of mac in bytes.
-pub const TAG_LENGTH: usize = <Cipher as AeadCore>::TagSize::USIZE;
+pub const TAG_LENGTH: usize = <AesGcmCipher as AeadCore>::TagSize::USIZE;
 /// Length of secret used to compute key data in bytes.
 pub const SECRET_LENGTH: usize = 16;
 /// Length of key data in bytes.
@@ -26,17 +26,17 @@ pub const SESSION_ID_LENGTH: usize = 8;
 /// Protocol identifier used to compute key data.
 pub const SESSION_INFO: &'static [u8] = b"discv5 sub-protocol session";
 
-/// Nonce used by [`Cipher`].
-pub type Nonce = NonceAesGcm<<Cipher as AeadCore>::NonceSize>;
+/// Nonce used by [`AesGcmCipher`].
+pub type Nonce = NonceAesGcm<<AesGcmCipher as AeadCore>::NonceSize>;
 pub type SessionId = u64;
 pub type Secret = [u8; SECRET_LENGTH];
 
-type Initiator = (SessionId, Cipher);
-type Recipient = (SessionId, Cipher);
+type Initiator = (SessionId, AesGcmCipher);
+type Recipient = (SessionId, AesGcmCipher);
 
-pub trait Encrypt {
+pub trait AesGcmEncrypt {
     fn aes_gcm_encrypt(
-        egress_cipher: &mut Cipher,
+        egress_cipher: &mut AesGcmCipher,
         nonce_counter: &mut NonceCounter,
         msg: &[u8],
         aad: &[u8], // use session-id
@@ -56,9 +56,9 @@ pub trait Encrypt {
     }
 }
 
-pub trait Decrypt {
+pub trait AesGcmDecrypt {
     fn aes_gcm_decrypt(
-        ingress_cipher: &mut Cipher,
+        ingress_cipher: &mut AesGcmCipher,
         nonce: &Nonce,
         data: &[u8],
         aad: &[u8], // use session-id
@@ -90,9 +90,9 @@ pub(crate) fn compute_ciphers_and_ids(
     let mut kdata = [0u8; KDATA_LENGTH];
     hk.expand(&info, &mut kdata)?;
 
-    let initiator_cipher = Cipher::new(GenericArray::from_slice(&kdata[..KEY_LENGTH]));
+    let initiator_cipher = AesGcmCipher::new(GenericArray::from_slice(&kdata[..KEY_LENGTH]));
     let recipient_cipher =
-        Cipher::new(GenericArray::from_slice(&kdata[KEY_LENGTH..KEY_LENGTH * 2]));
+        AesGcmCipher::new(GenericArray::from_slice(&kdata[KEY_LENGTH..KEY_LENGTH * 2]));
 
     let mut initiator_id = [0u8; SESSION_ID_LENGTH];
     let mut recipient_id = [0u8; SESSION_ID_LENGTH];

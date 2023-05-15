@@ -3,11 +3,11 @@ use std::net::SocketAddr;
 mod crypto;
 
 pub use crypto::{
-    AesGcmError, Cipher, Decrypt, Encrypt, GenericArray, HkdfError, Nonce, Secret, SessionId,
-    KEY_LENGTH, NONCE_LENGTH, SECRET_LENGTH, SESSION_ID_LENGTH, TAG_LENGTH,
+    AesGcmCipher, AesGcmDecrypt, AesGcmEncrypt, AesGcmError, GenericArray, HkdfError, Nonce,
+    Secret, SessionId, KEY_LENGTH, NONCE_LENGTH, SECRET_LENGTH, SESSION_ID_LENGTH, TAG_LENGTH,
 };
 
-pub type Session = (EgressSession<Cipher>, IngressSession<Cipher>);
+pub type Session = (EgressSession<AesGcmCipher>, IngressSession<AesGcmCipher>);
 pub(crate) type NonceCounter = u32;
 
 /// A session to encrypt outgoing data.
@@ -23,9 +23,9 @@ pub struct EgressSession<T> {
     ip: SocketAddr,
 }
 
-impl EgressSession<Cipher> {
+impl EgressSession<AesGcmCipher> {
     pub fn encrypt(&mut self, msg: &[u8], aad: &[u8]) -> Result<Vec<u8>, AesGcmError> {
-        <Self as Encrypt>::aes_gcm_encrypt(
+        <Self as AesGcmEncrypt>::aes_gcm_encrypt(
             &mut self.egress_cipher,
             &mut self.nonce_counter,
             msg,
@@ -34,7 +34,7 @@ impl EgressSession<Cipher> {
     }
 }
 
-impl Encrypt for EgressSession<Cipher> {}
+impl AesGcmEncrypt for EgressSession<AesGcmCipher> {}
 
 /// A session to decrypt incoming data.
 pub struct IngressSession<T> {
@@ -46,18 +46,18 @@ pub struct IngressSession<T> {
     egress_id: SessionId,
 }
 
-impl IngressSession<Cipher> {
+impl IngressSession<AesGcmCipher> {
     pub fn decrypt(
         &mut self,
         nonce: &Nonce,
         data: &[u8],
         aad: &[u8],
     ) -> Result<Vec<u8>, AesGcmError> {
-        <Self as Decrypt>::aes_gcm_decrypt(&mut self.ingress_cipher, nonce, data, aad)
+        <Self as AesGcmDecrypt>::aes_gcm_decrypt(&mut self.ingress_cipher, nonce, data, aad)
     }
 }
 
-impl Decrypt for IngressSession<Cipher> {}
+impl AesGcmDecrypt for IngressSession<AesGcmCipher> {}
 
 pub trait EstablishSession {
     fn initiate(
@@ -104,10 +104,10 @@ pub trait EstablishSession {
 
 fn new_session(
     egress_id: SessionId,
-    egress_cipher: Cipher,
+    egress_cipher: AesGcmCipher,
     remote_socket: SocketAddr,
     ingress_id: SessionId,
-    ingress_cipher: Cipher,
+    ingress_cipher: AesGcmCipher,
 ) -> Session {
     let egress = EgressSession {
         egress_id,
