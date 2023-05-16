@@ -1,16 +1,16 @@
-# tunnel
+# Sub-protocol data transmission, an encrypted tunnel through discv5
 
-A tunnel is used to send packets of a different protocol than discv5.
+A sub-protocol session is used to send packets of a different protocol than discv5.
 
-A tunnel packet passes through the same socket as a discv5 packet so it can make use of
-discv5's punched NAT holes. A tunnel gets a different set of session keys than the discv5 session
-used to share those keys, in TALKREQ and TALKRESP. A tunnel session can be used to send an
-arbitrary number of packets without making the discv5 session less safe because it doesn't use
-the discv5 session's keys too often.
+A sub-protocol session gets a different set of session keys than the discv5 session.
+The trusted discv5 session is used to key-share, specifically the TALKREQ and TALKRESP.
+A sub-protocol session can be used to send an arbitrary number of packets without making
+the discv5 session less safe because it doesn't use the discv5 session's keys too often.
 
-A tunnel is indexed by the tuple (sr-address, connection-id). Since the connection id is a 32 byte
-hash, there is no need to mask the header of a tunnel packet to protect against packet filtering.
-For this a tunnel packet is much lighter than a discv5 frame.
+A sub-protocol session is indexed by the tuple (egress-id, ingress-id). The sub-protocol
+session packet frame is (session-id, nonce, mac), in total 36 bytes. As the session-id is
+unique for each session the frame doesn't need to masked. For this a sub-protocol session
+frame is much lighter than a discv5 frame.
 
 Plugged into discv5 here:
 https://github.com/emhane/discv5/tree/tunnel-discv5.2
